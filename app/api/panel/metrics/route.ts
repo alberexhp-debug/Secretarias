@@ -78,6 +78,6 @@ export async function GET(req: NextRequest) {
       resolutionRate: totalTickets > 0 ? Math.round((resolvedTickets / totalTickets) * 100) : 0,
     },
     dailyActivity,
-    channelBreakdown: channelBreakdown.map((c) => ({ channel: c.channel, count: c._count })),
+    channelBreakdown: channelBreakdown.map((c: { channel: string; _count: number }) => ({ channel: c.channel, count: c._count })),
   });
 }
