@@ -3,9 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
 import { buildSystemPrompt } from "@/lib/ai";
 
-export async function POST() {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not available in production" }, { status: 403 });
+export async function POST(req: Request) {
+  const secret = new URL(req.url).searchParams.get("secret");
+  if (process.env.NODE_ENV === "production" && secret !== process.env.SEED_SECRET) {
+    return NextResponse.json({ error: "Not available" }, { status: 403 });
   }
 
   // Check if demo user exists
