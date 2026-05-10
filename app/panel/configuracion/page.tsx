@@ -53,12 +53,21 @@ export default function ConfiguracionPage() {
   const [newFaqQ, setNewFaqQ] = useState("");
   const [newFaqA, setNewFaqA] = useState("");
 
-  // Email channel state
-  const [emailExpanded, setEmailExpanded] = useState(false);
-  const [emailInput, setEmailInput] = useState("");
-  const [emailSaving, setEmailSaving] = useState(false);
-  const [emailMsg, setEmailMsg] = useState("");
-  const [inboundAddress, setInboundAddress] = useState("");
+  // Email accounts state
+  interface EmailAccount { id: string; provider: string; email: string; label: string; connected: boolean; lastChecked: string | null }
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [showAddEmail, setShowAddEmail] = useState(false);
+  const [addEmailTab, setAddEmailTab] = useState<"gmail" | "outlook" | "imap">("gmail");
+  const [imapEmail, setImapEmail] = useState("");
+  const [imapPassword, setImapPassword] = useState("");
+  const [imapHost, setImapHost] = useState("");
+  const [imapPort, setImapPort] = useState("");
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("");
+  const [imapSaving, setImapSaving] = useState(false);
+  const [imapMsg, setImapMsg] = useState("");
+  const [importingId, setImportingId] = useState<string | null>(null);
+  const [importMsg, setImportMsg] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch("/api/panel/secretary")
@@ -78,39 +87,41 @@ export default function ConfiguracionPage() {
       });
   }, []);
 
-  const loadEmailConfig = useCallback(() => {
-    fetch("/api/panel/channels/email")
-      .then((r) => r.json())
-      .then((d) => {
-        setInboundAddress(d.inboundAddress || "");
-        if (d.emailAddress) setEmailInput(d.emailAddress);
-      });
+  const loadEmailAccounts = useCallback(() => {
+    fetch("/api/panel/email-accounts").then((r) => r.json()).then((d) => setEmailAccounts(d.accounts || []));
   }, []);
 
-  useEffect(() => { loadEmailConfig(); }, [loadEmailConfig]);
+  useEffect(() => { loadEmailAccounts(); }, [loadEmailAccounts]);
 
-  async function connectEmail() {
-    setEmailSaving(true);
-    setEmailMsg("");
-    const r = await fetch("/api/panel/channels/email", {
+  async function connectImap() {
+    setImapSaving(true); setImapMsg("");
+    const r = await fetch("/api/panel/email-accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ emailAddress: emailInput }),
+      body: JSON.stringify({ email: imapEmail, password: imapPassword, imapHost: imapHost || undefined, imapPort: imapPort ? parseInt(imapPort) : undefined, smtpHost: smtpHost || undefined, smtpPort: smtpPort ? parseInt(smtpPort) : undefined }),
     });
-    if (r.ok) {
-      setEmailMsg("Email conectado correctamente");
-      if (config) setConfig({ ...config, emailConnected: true, emailAddress: emailInput });
-    } else {
-      const d = await r.json();
-      setEmailMsg(d.error || "Error al conectar");
-    }
-    setEmailSaving(false);
+    const d = await r.json();
+    if (r.ok) { setImapMsg("✓ Cuenta conectada"); loadEmailAccounts(); setShowAddEmail(false); setImapEmail(""); setImapPassword(""); }
+    else setImapMsg(d.error || "Error al conectar");
+    setImapSaving(false);
   }
 
-  async function disconnectEmail() {
-    await fetch("/api/panel/channels/email", { method: "DELETE" });
-    if (config) setConfig({ ...config, emailConnected: false });
-    setEmailMsg("Email desconectado");
+  async function removeAccount(id: string) {
+    await fetch(`/api/panel/email-accounts/${id}`, { method: "DELETE" });
+    loadEmailAccounts();
+  }
+
+  async function toggleAccount(id: string, connected: boolean) {
+    await fetch(`/api/panel/email-accounts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connected }) });
+    loadEmailAccounts();
+  }
+
+  async function importSent(id: string) {
+    setImportingId(id); setImportMsg((m) => ({ ...m, [id]: "" }));
+    const r = await fetch(`/api/panel/email-accounts/${id}/import-sent`, { method: "POST" });
+    const d = await r.json();
+    setImportMsg((m) => ({ ...m, [id]: r.ok ? `✓ ${d.imported} emails importados` : (d.error || "Error") }));
+    setImportingId(null);
   }
 
   async function save(partial?: Partial<SecretaryConfig>) {
@@ -411,114 +422,122 @@ export default function ConfiguracionPage() {
 
       {/* Tab: Canales */}
       {activeTab === "channels" && (
-        <div className="space-y-4">
+        <div className="space-y-5">
 
           {/* WhatsApp — coming soon */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">📱</div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center text-2xl">📱</div>
                 <div>
                   <h3 className="font-semibold text-gray-900">WhatsApp</h3>
-                  <p className="text-sm text-gray-500">{config.whatsappNumber || "Tu secretario responde mensajes de WhatsApp"}</p>
+                  <p className="text-sm text-gray-500">Tu secretario responde mensajes de WhatsApp</p>
                 </div>
               </div>
-              <span className={`text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 ${config.whatsappConnected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                {config.whatsappConnected ? "✓ Conectado" : "Próximamente"}
-              </span>
+              <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full">Próximamente</span>
             </div>
           </div>
 
-          {/* Email — functional */}
-          <div className={`bg-white rounded-2xl border-2 p-5 ${config.emailConnected ? "border-blue-200" : "border-gray-100"}`}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">📧</div>
+          {/* Email — multi-account manager */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-2xl">📧</div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">Email</h3>
+                  <h3 className="font-semibold text-gray-900">Cuentas de email</h3>
                   <p className="text-sm text-gray-500">
-                    {config.emailConnected
-                      ? `Conectado · ${config.emailAddress}`
-                      : "Recibe y gestiona emails de clientes con tu secretario"}
+                    {emailAccounts.length === 0 ? "Conecta Gmail, Outlook u otro proveedor" : `${emailAccounts.length} cuenta${emailAccounts.length > 1 ? "s" : ""} conectada${emailAccounts.length > 1 ? "s" : ""}`}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={`text-xs font-medium px-2 py-1 rounded-full ${config.emailConnected ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"}`}>
-                  {config.emailConnected ? "✓ Conectado" : "No conectado"}
-                </span>
-                <button
-                  onClick={() => setEmailExpanded(!emailExpanded)}
-                  className="text-xs text-indigo-600 hover:underline"
-                >
-                  {emailExpanded ? "Ocultar" : config.emailConnected ? "Configurar" : "Conectar"}
-                </button>
-              </div>
+              <button
+                onClick={() => setShowAddEmail(!showAddEmail)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                + Añadir cuenta
+              </button>
             </div>
 
-            {emailExpanded && (
-              <div className="mt-5 pt-5 border-t border-gray-100 space-y-4">
-                {/* Step 1: business email */}
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">
-                    Email de tu negocio (el que usan tus clientes para contactarte)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      placeholder="ej. info@tunegocio.com"
-                      value={emailInput}
-                      onChange={(e) => setEmailInput(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    />
-                    <button
-                      onClick={connectEmail}
-                      disabled={emailSaving || !emailInput.trim()}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
-                    >
-                      {emailSaving ? "Guardando…" : "Guardar"}
-                    </button>
-                    {config.emailConnected && (
+            {/* Connected accounts list */}
+            {emailAccounts.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {emailAccounts.map((acc) => (
+                  <div key={acc.id} className={`flex items-center gap-3 p-3 rounded-xl border ${acc.connected ? "border-blue-100 bg-blue-50/50" : "border-gray-100 bg-gray-50"}`}>
+                    <span className="text-xl flex-shrink-0">{acc.provider === "gmail" ? "🔴" : acc.provider === "outlook" ? "🔵" : "📧"}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{acc.email}</div>
+                      <div className="text-xs text-gray-400 capitalize">{acc.provider}{acc.lastChecked ? ` · revisado ${new Date(acc.lastChecked).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {importMsg[acc.id] && <span className="text-xs text-green-600">{importMsg[acc.id]}</span>}
                       <button
-                        onClick={disconnectEmail}
-                        className="px-3 py-2 border border-red-200 text-red-500 text-sm rounded-xl hover:bg-red-50"
+                        onClick={() => importSent(acc.id)}
+                        disabled={importingId === acc.id}
+                        title="Importar enviados para que el secretario aprenda tu estilo"
+                        className="text-xs text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50"
                       >
-                        Desconectar
+                        {importingId === acc.id ? "Importando…" : "📥 Importar enviados"}
                       </button>
-                    )}
+                      <button onClick={() => toggleAccount(acc.id, !acc.connected)} className={`text-xs px-2 py-1 rounded-lg border transition-colors ${acc.connected ? "border-gray-200 text-gray-500 hover:bg-gray-50" : "border-blue-200 text-blue-600 hover:bg-blue-50"}`}>
+                        {acc.connected ? "Pausar" : "Activar"}
+                      </button>
+                      <button onClick={() => removeAccount(acc.id)} className="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50">✕</button>
+                    </div>
                   </div>
-                  {emailMsg && (
-                    <p className={`text-xs mt-1 ${emailMsg.includes("Error") ? "text-red-500" : "text-green-600"}`}>{emailMsg}</p>
-                  )}
-                </div>
+                ))}
+              </div>
+            )}
 
-                {/* Step 2: inbound forwarding instructions */}
-                <div className="bg-blue-50 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-blue-800 mb-2">📨 Cómo recibir emails automáticamente</p>
-                  <p className="text-sm text-blue-700 mb-3">
-                    Configura un reenvío automático desde tu cuenta de correo hacia esta dirección:
-                  </p>
-                  <div className="bg-white border border-blue-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                    <code className="text-xs text-blue-900 font-mono break-all">{inboundAddress || "secretaria-[tu-id]@inbound.secretarios-ia.com"}</code>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(inboundAddress)}
-                      className="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0"
-                    >
-                      Copiar
+            {/* Add account panel */}
+            {showAddEmail && (
+              <div className="border-t border-gray-100 pt-4 space-y-4">
+                {/* Provider tabs */}
+                <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+                  {(["gmail", "outlook", "imap"] as const).map((tab) => (
+                    <button key={tab} onClick={() => setAddEmailTab(tab)}
+                      className={`flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${addEmailTab === tab ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
+                      {tab === "gmail" ? "🔴 Gmail" : tab === "outlook" ? "🔵 Outlook" : "📧 Otro"}
                     </button>
-                  </div>
-                  <p className="text-xs text-blue-600 mt-3">
-                    <strong>Gmail:</strong> Ajustes → Ver todos → Reenvío → Añadir dirección de reenvío<br />
-                    <strong>Outlook:</strong> Ajustes → Correo → Reenvío → Activar reenvío<br />
-                    Cada email que llegue a tu buzón se reenviará a tu secretario, que sugerirá una respuesta para que la revises antes de enviar.
-                  </p>
+                  ))}
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                {/* Gmail OAuth */}
+                {addEmailTab === "gmail" && (
+                  <div className="space-y-3">
+                    <a href="/api/auth/gmail" className="flex items-center justify-center gap-2 w-full py-2.5 border-2 border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                      <span className="text-lg">🔴</span> Conectar con Google
+                    </a>
+                    <p className="text-xs text-gray-400 text-center">Acceso seguro via OAuth · no almacenamos tu contraseña</p>
+                    <div className="border-t border-gray-100 pt-3">
+                      <p className="text-xs text-gray-500 mb-2 font-medium">O conectar con contraseña de aplicación:</p>
+                      <ImapForm tab="gmail" {...{ imapEmail, setImapEmail, imapPassword, setImapPassword, imapHost, setImapHost, imapPort, setImapPort, smtpHost, setSmtpHost, smtpPort, setSmtpPort, imapSaving, imapMsg, connectImap }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Outlook OAuth */}
+                {addEmailTab === "outlook" && (
+                  <div className="space-y-3">
+                    <a href="/api/auth/outlook" className="flex items-center justify-center gap-2 w-full py-2.5 border-2 border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                      <span className="text-lg">🔵</span> Conectar con Microsoft
+                    </a>
+                    <p className="text-xs text-gray-400 text-center">Acceso seguro via OAuth · no almacenamos tu contraseña</p>
+                    <div className="border-t border-gray-100 pt-3">
+                      <p className="text-xs text-gray-500 mb-2 font-medium">O conectar con contraseña de aplicación:</p>
+                      <ImapForm tab="outlook" {...{ imapEmail, setImapEmail, imapPassword, setImapPassword, imapHost, setImapHost, imapPort, setImapPort, smtpHost, setSmtpHost, smtpPort, setSmtpPort, imapSaving, imapMsg, connectImap }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* IMAP manual */}
+                {addEmailTab === "imap" && (
+                  <ImapForm tab="imap" {...{ imapEmail, setImapEmail, imapPassword, setImapPassword, imapHost, setImapHost, imapPort, setImapPort, smtpHost, setSmtpHost, smtpPort, setSmtpPort, imapSaving, imapMsg, connectImap }} />
+                )}
+
+                <div className="bg-amber-50 rounded-xl p-3">
                   <p className="text-xs text-amber-700">
-                    <strong>¿Cómo funciona?</strong> Cuando llegue un email, tu secretario lo clasificará y redactará una respuesta sugerida.
-                    Tú decides si <strong>confirmar</strong>, <strong>editar</strong> o <strong>cancelar</strong> antes de que se envíe.
-                    Nada se envía automáticamente.
+                    <strong>¿Cómo funciona?</strong> Cuando llegue un email, tu secretario lo clasifica y redacta una respuesta sugerida.
+                    Tú la revisas en el panel de Conversaciones y decides <strong>confirmar, editar o cancelar</strong>. Nada se envía automáticamente.
                   </p>
                 </div>
               </div>
@@ -527,28 +546,28 @@ export default function ConfiguracionPage() {
 
           {/* Google Calendar — coming soon */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5 opacity-70">
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center text-2xl">📅</div>
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-gray-900">Google Calendar</h3>
                   <span className="text-xs bg-indigo-100 text-indigo-500 px-2 py-0.5 rounded-full">Próximamente</span>
                 </div>
-                <p className="text-sm text-gray-500 mt-0.5">Sincroniza citas directamente con tu calendario de Google</p>
+                <p className="text-sm text-gray-500 mt-0.5">Sincroniza citas directamente con tu calendario</p>
               </div>
             </div>
           </div>
 
-          {/* Calls — future */}
+          {/* Calls */}
           <div className="bg-gray-50 rounded-2xl border border-gray-100 p-5 opacity-60">
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-2xl">📞</div>
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-gray-700">Llamadas</h3>
+                <h3 className="font-semibold text-gray-700">Llamadas</h3>
+                <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-xs bg-gray-200 text-gray-400 px-2 py-0.5 rounded-full">Próximamente</span>
+                  <p className="text-sm text-gray-400">Tu secretario atenderá llamadas con voz natural</p>
                 </div>
-                <p className="text-sm text-gray-400">Tu secretario atenderá llamadas con voz natural</p>
               </div>
             </div>
           </div>
@@ -657,6 +676,62 @@ export default function ConfiguracionPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface ImapFormProps {
+  tab: "gmail" | "outlook" | "imap";
+  imapEmail: string; setImapEmail: (v: string) => void;
+  imapPassword: string; setImapPassword: (v: string) => void;
+  imapHost: string; setImapHost: (v: string) => void;
+  imapPort: string; setImapPort: (v: string) => void;
+  smtpHost: string; setSmtpHost: (v: string) => void;
+  smtpPort: string; setSmtpPort: (v: string) => void;
+  imapSaving: boolean; imapMsg: string;
+  connectImap: () => void;
+}
+
+function ImapForm({ tab, imapEmail, setImapEmail, imapPassword, setImapPassword, imapHost, setImapHost, imapPort, setImapPort, smtpHost, setSmtpHost, smtpPort, setSmtpPort, imapSaving, imapMsg, connectImap }: ImapFormProps) {
+  const isManual = tab === "imap";
+  const placeholder = tab === "gmail" ? "ej. tunombre@gmail.com" : tab === "outlook" ? "ej. tunombre@outlook.com" : "ej. info@tunegocio.com";
+  const passLabel = tab === "imap" ? "Contraseña" : "Contraseña de aplicación";
+  const passHelp = tab === "gmail"
+    ? "Genera una contraseña de aplicación en myaccount.google.com → Seguridad → Verificación en 2 pasos → Contraseñas de aplicación"
+    : tab === "outlook"
+    ? "Genera una contraseña de aplicación en account.microsoft.com → Seguridad → Contraseñas de aplicación"
+    : "";
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3">
+        <input type="email" placeholder={placeholder} value={imapEmail} onChange={(e) => setImapEmail(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        <div>
+          <input type="password" placeholder={passLabel} value={imapPassword} onChange={(e) => setImapPassword(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          {passHelp && <p className="text-xs text-gray-400 mt-1">{passHelp}</p>}
+        </div>
+      </div>
+
+      {isManual && (
+        <div className="grid grid-cols-2 gap-2">
+          <input placeholder="Servidor IMAP (ej. imap.tudominio.com)" value={imapHost} onChange={(e) => setImapHost(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          <input placeholder="Puerto IMAP (993)" value={imapPort} onChange={(e) => setImapPort(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          <input placeholder="Servidor SMTP (ej. smtp.tudominio.com)" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          <input placeholder="Puerto SMTP (587)" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        </div>
+      )}
+
+      <button onClick={connectImap} disabled={imapSaving || !imapEmail || !imapPassword}
+        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors">
+        {imapSaving ? "Verificando conexión…" : "Conectar cuenta"}
+      </button>
+      {imapMsg && <p className={`text-xs text-center ${imapMsg.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>{imapMsg}</p>}
     </div>
   );
 }

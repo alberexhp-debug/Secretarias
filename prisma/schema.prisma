@@ -28,6 +28,7 @@ model User {
   sessions          Session[]
   activityLogs      ActivityLog[]
   emailStyleExamples EmailStyleExample[]
+  emailAccounts     ConnectedEmailAccount[]
 }
 
 model Session {
@@ -187,6 +188,34 @@ model Notification {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ConnectedEmailAccount {
+  id           String    @id @default(cuid())
+  userId       String
+  provider     String    // "gmail" | "outlook" | "imap"
+  email        String
+  label        String    @default("")
+  // OAuth tokens (Gmail / Outlook)
+  accessToken  String?
+  refreshToken String?
+  tokenExpiry  DateTime?
+  // IMAP credentials (encrypted)
+  imapHost     String?
+  imapPort     Int?
+  imapPassword String?
+  smtpHost     String?
+  smtpPort     Int?
+  // State
+  connected    Boolean   @default(false)
+  lastChecked  DateTime?
+  lastUid      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model EmailStyleExample {
