@@ -3,12 +3,18 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
+const baseUrl = process.env["DATABASE_URL"] ?? "";
+const authToken = process.env["TURSO_AUTH_TOKEN"];
+const url = authToken && baseUrl.startsWith("libsql://")
+  ? `${baseUrl}?authToken=${authToken}`
+  : baseUrl;
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url,
   },
 });
