@@ -188,11 +188,11 @@ export default async function LandingPage() {
             </div>
             <span className="font-bold text-gray-900">Secretario IA</span>
           </div>
-          <div className="text-sm text-gray-400">© 2024 Secretario IA · Para PYMEs de toda clase</div>
+          <div className="text-sm text-gray-400">© 2025 Secretario IA · Para PYMEs de toda clase</div>
           <div className="flex gap-6 text-sm text-gray-400">
-            <a href="#" className="hover:text-gray-600">Privacidad</a>
-            <a href="#" className="hover:text-gray-600">Términos</a>
-            <a href="#" className="hover:text-gray-600">Soporte</a>
+            <Link href="/privacidad" className="hover:text-gray-600">Privacidad</Link>
+            <Link href="/terminos" className="hover:text-gray-600">Términos</Link>
+            <a href="mailto:hola@secretarioia.mx" className="hover:text-gray-600">Soporte</a>
           </div>
         </div>
       </footer>

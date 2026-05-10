@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const period = searchParams.get("period") || "week";
 
   const now = new Date();
-  let start = new Date();
+  const start = new Date();
 
   if (period === "today") {
     start.setHours(0, 0, 0, 0);
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     totalAppointments,
     totalTickets,
     resolvedTickets,
-    activityByDay,
+    activityLogs,
     channelBreakdown,
   ] = await Promise.all([
     prisma.message.count({
@@ -45,10 +45,11 @@ export async function GET(req: NextRequest) {
     prisma.ticket.count({
       where: { userId: user.id, status: "resolved", createdAt: { gte: start } },
     }),
-    prisma.activityLog.groupBy({
-      by: ["createdAt"],
+    // Fetch individual records and aggregate by date in JS — groupBy createdAt
+    // groups by full timestamp which gives one row per event, not per day.
+    prisma.activityLog.findMany({
       where: { userId: user.id, createdAt: { gte: start } },
-      _count: true,
+      select: { createdAt: true },
     }),
     prisma.message.groupBy({
       by: ["channel"],
@@ -57,15 +58,15 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  // Build daily activity chart
+  // Build daily activity chart — one entry per calendar day in the range
   const dayMap = new Map<string, number>();
-  for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
+  for (const d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
     dayMap.set(d.toISOString().slice(0, 10), 0);
   }
-  activityByDay.forEach((a: { createdAt: Date; _count: number }) => {
-    const day = new Date(a.createdAt).toISOString().slice(0, 10);
-    dayMap.set(day, (dayMap.get(day) || 0) + a._count);
-  });
+  for (const log of activityLogs) {
+    const day = new Date(log.createdAt).toISOString().slice(0, 10);
+    dayMap.set(day, (dayMap.get(day) ?? 0) + 1);
+  }
 
   const dailyActivity = Array.from(dayMap.entries()).map(([date, count]) => ({ date, count }));
 
@@ -78,6 +79,9 @@ export async function GET(req: NextRequest) {
       resolutionRate: totalTickets > 0 ? Math.round((resolvedTickets / totalTickets) * 100) : 0,
     },
     dailyActivity,
-    channelBreakdown: channelBreakdown.map((c: { channel: string; _count: number }) => ({ channel: c.channel, count: c._count })),
+    channelBreakdown: channelBreakdown.map((c: { channel: string; _count: number }) => ({
+      channel: c.channel,
+      count: c._count,
+    })),
   });
 }

@@ -31,6 +31,11 @@ interface DashboardData {
     channel: string;
     createdAt: string;
   }>;
+  plan: {
+    type: string;
+    active: boolean;
+    trialDaysLeft: number | null;
+  };
 }
 
 export default function PanelDashboard() {
@@ -49,7 +54,7 @@ export default function PanelDashboard() {
 
   if (loading) return <LoadingSkeleton />;
 
-  const { secretary, stats, recentActivity } = data!;
+  const { secretary, stats, recentActivity, plan } = data!;
   const emoji = secretary ? AVATAR_EMOJIS[secretary.avatarId] || "👩" : "🤖";
   const name = secretary?.name || "Tu secretario";
 
@@ -64,6 +69,24 @@ export default function PanelDashboard() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto">
+      {/* Trial expiry banner */}
+      {plan && !plan.active && (
+        <div className="bg-red-500 text-white rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <span className="font-medium">⏳ Tu período de prueba ha expirado. Activa un plan para seguir usando Secretario IA.</span>
+          <Link href="/panel/configuracion" className="bg-white text-red-500 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-red-50">
+            Ver planes
+          </Link>
+        </div>
+      )}
+      {plan && plan.active && plan.type === "trial" && plan.trialDaysLeft !== null && plan.trialDaysLeft <= 3 && (
+        <div className="bg-amber-400 text-amber-900 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <span className="font-medium">⏳ Tu prueba gratuita vence en {plan.trialDaysLeft} día{plan.trialDaysLeft !== 1 ? "s" : ""}.</span>
+          <Link href="/panel/configuracion" className="bg-amber-900 text-amber-100 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-amber-800">
+            Activar plan
+          </Link>
+        </div>
+      )}
+
       {/* Urgent banner */}
       {stats.urgentTickets > 0 && (
         <div className="bg-orange-500 text-white rounded-xl px-4 py-3 mb-6 flex items-center justify-between">

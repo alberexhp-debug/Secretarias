@@ -48,3 +48,13 @@ export async function requireAuth() {
   }
   return user;
 }
+
+export function isPlanActive(user: { planType: string; planExpiry: Date | null; trialEnd: Date | null }): boolean {
+  if (user.planType === "pro" || user.planType === "business" || user.planType === "enterprise") {
+    if (!user.planExpiry) return true;
+    return new Date(user.planExpiry) > new Date();
+  }
+  // trial
+  if (!user.trialEnd) return true;
+  return new Date(user.trialEnd) > new Date();
+}

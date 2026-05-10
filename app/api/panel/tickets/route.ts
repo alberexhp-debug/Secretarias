@@ -19,10 +19,7 @@ export async function GET(req: NextRequest) {
   const tickets = await prisma.ticket.findMany({
     where,
     include: { contact: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
-    orderBy: [
-      { priority: "desc" },
-      { createdAt: "desc" },
-    ],
+    orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
   });
 
   return NextResponse.json({ tickets });
@@ -33,6 +30,8 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const body = await req.json();
+  const isUrgent = body.priority === "urgent";
+
   const ticket = await prisma.ticket.create({
     data: {
       userId: user.id,
@@ -44,16 +43,31 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await prisma.activityLog.create({
-    data: {
-      userId: user.id,
-      action: "ticket_created",
-      description: `Creó ticket: ${body.title}`,
-      channel: body.channel || "whatsapp",
-      entityType: "ticket",
-      entityId: ticket.id,
-    },
-  });
+  await Promise.all([
+    prisma.activityLog.create({
+      data: {
+        userId: user.id,
+        action: "ticket_created",
+        description: `Creó ticket: ${body.title}`,
+        channel: body.channel || "whatsapp",
+        entityType: "ticket",
+        entityId: ticket.id,
+      },
+    }),
+    // Create notification for urgent tickets
+    isUrgent
+      ? prisma.notification.create({
+          data: {
+            userId: user.id,
+            type: "urgent_ticket",
+            title: "Ticket urgente creado",
+            body: body.title,
+            link: `/panel/tickets`,
+            urgent: true,
+          },
+        })
+      : Promise.resolve(null),
+  ]);
 
   return NextResponse.json({ ticket });
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, isPlanActive } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -44,6 +44,11 @@ export async function GET() {
 
   const secretary = user.secretary;
 
+  const planActive = isPlanActive(user);
+  const trialDaysLeft = user.trialEnd
+    ? Math.max(0, Math.ceil((new Date(user.trialEnd).getTime() - Date.now()) / 86400000))
+    : null;
+
   return NextResponse.json({
     secretary: secretary ? { name: secretary.name, avatarId: secretary.avatarId } : null,
     stats: {
@@ -53,5 +58,10 @@ export async function GET() {
       urgentTickets,
     },
     recentActivity,
+    plan: {
+      type: user.planType,
+      active: planActive,
+      trialDaysLeft,
+    },
   });
 }
