@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
   for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
     dayMap.set(d.toISOString().slice(0, 10), 0);
   }
-  activityByDay.forEach((a) => {
+  activityByDay.forEach((a: { createdAt: Date; _count: number }) => {
     const day = new Date(a.createdAt).toISOString().slice(0, 10);
     dayMap.set(day, (dayMap.get(day) || 0) + a._count);
   });
