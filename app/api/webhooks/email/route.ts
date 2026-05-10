@@ -119,6 +119,45 @@ export async function POST(req: NextRequest) {
     rules,
   });
 
+  // Fetch up to 8 most recent style examples for this user
+  const styleExamples = await prisma.emailStyleExample.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 8,
+    select: { originalDraft: true, editedVersion: true, wasEdited: true, category: true },
+  });
+
+  // Build style learning context
+  let styleContext = "";
+  if (styleExamples.length > 0) {
+    const corrections = styleExamples.filter((e) => e.wasEdited);
+    const approvals = styleExamples.filter((e) => !e.wasEdited);
+
+    styleContext += "\n\n--- APRENDE DEL ESTILO DE ESCRITURA DEL DUEÑO ---";
+
+    if (corrections.length > 0) {
+      styleContext += "\n\nCORRECCIONES QUE HA HECHO (lo que escribiste vs. lo que prefirió):\n";
+      corrections.slice(0, 4).forEach((ex, i) => {
+        styleContext += `\nEjemplo ${i + 1}:\n  MI BORRADOR: ${ex.originalDraft.slice(0, 300)}\n  SU VERSIÓN: ${ex.editedVersion.slice(0, 300)}\n`;
+      });
+      styleContext += "\nAdapta tu estilo para parecerte más a su versión, no al borrador.";
+    }
+
+    if (approvals.length > 0) {
+      styleContext += "\n\nEJEMPLOS QUE APROBÓ SIN CAMBIOS (imita este tono y estructura):\n";
+      approvals.slice(0, 3).forEach((ex, i) => {
+        styleContext += `\nAprobado ${i + 1}: ${ex.editedVersion.slice(0, 300)}\n`;
+      });
+    }
+
+    styleContext += "\n--- FIN DE EJEMPLOS ---";
+  }
+
+  const emailSystemPrompt =
+    systemPrompt +
+    "\n\nESTÁS RESPONDIENDO UN EMAIL. Sé formal y profesional. Incluye saludo y despedida. Máximo 5 oraciones." +
+    styleContext;
+
   // Classify the email and generate reply suggestion in parallel
   const [category, suggestedReply] = await Promise.all([
     process.env.ANTHROPIC_API_KEY
@@ -126,7 +165,7 @@ export async function POST(req: NextRequest) {
       : Promise.resolve<EmailCategory>("otro"),
     chatWithSecretary(
       [{ role: "user", content: `Email recibido de ${fromName}:\nAsunto: ${subject}\n\n${body}` }],
-      systemPrompt + "\n\nESTÁS RESPONDIENDO UN EMAIL. Sé formal y profesional. Incluye saludo y despedida. Máximo 5 oraciones."
+      emailSystemPrompt
     ),
   ]);
 

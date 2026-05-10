@@ -56,6 +56,18 @@ export async function POST(req: NextRequest) {
     originalSubject: subject,
   });
 
+  // Always save confirmed emails as style learning examples
+  const wasEdited = !!(editedContent?.trim() && editedContent.trim() !== message.content.trim());
+  await prisma.emailStyleExample.create({
+    data: {
+      userId: user.id,
+      category: (meta.category as string) || "",
+      originalDraft: message.content,
+      editedVersion: finalContent,
+      wasEdited,
+    },
+  });
+
   await prisma.message.update({
     where: { id: messageId },
     data: {

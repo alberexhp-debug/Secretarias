@@ -20,13 +20,14 @@ model User {
   planExpiry    DateTime?
   trialEnd      DateTime?
 
-  secretary     Secretary?
-  tickets       Ticket[]
-  conversations Conversation[]
-  contacts      Contact[]
-  notifications Notification[]
-  sessions      Session[]
-  activityLogs  ActivityLog[]
+  secretary         Secretary?
+  tickets           Ticket[]
+  conversations     Conversation[]
+  contacts          Contact[]
+  notifications     Notification[]
+  sessions          Session[]
+  activityLogs      ActivityLog[]
+  emailStyleExamples EmailStyleExample[]
 }
 
 model Session {
@@ -186,6 +187,20 @@ model Notification {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailStyleExample {
+  id               String   @id @default(cuid())
+  userId           String
+  category         String   @default("")
+  originalDraft    String
+  editedVersion    String
+  wasEdited        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model ActivityLog {
