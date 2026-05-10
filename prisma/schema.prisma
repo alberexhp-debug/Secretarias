@@ -110,6 +110,7 @@ model Conversation {
   contactId     String?
   channel       String   @default("whatsapp")
   status        String   @default("active")
+  subject       String?
   lastMessage   String   @default("")
   lastMessageAt DateTime @default(now())
   createdAt     DateTime @default(now())
@@ -127,6 +128,7 @@ model Message {
   content        String
   channel        String   @default("whatsapp")
   status         String   @default("sent")
+  metadata       String?
   isOutOfHours   Boolean  @default(false)
   createdAt      DateTime @default(now())
 

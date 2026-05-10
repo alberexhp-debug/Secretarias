@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, generateToken } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,6 +39,9 @@ export async function POST(req: NextRequest) {
     });
 
     const token = generateToken(user.id);
+
+    // Fire-and-forget welcome email
+    sendWelcomeEmail(user.email, user.name || "").catch(() => {});
 
     const response = NextResponse.json({ success: true, user: { id: user.id, name: user.name, email: user.email } });
     response.cookies.set("auth-token", token, {

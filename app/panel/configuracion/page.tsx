@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 const AVATARS = [
   { id: "avatar-1", emoji: "👩" }, { id: "avatar-2", emoji: "👨" },
@@ -53,6 +53,13 @@ export default function ConfiguracionPage() {
   const [newFaqQ, setNewFaqQ] = useState("");
   const [newFaqA, setNewFaqA] = useState("");
 
+  // Email channel state
+  const [emailExpanded, setEmailExpanded] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailMsg, setEmailMsg] = useState("");
+  const [inboundAddress, setInboundAddress] = useState("");
+
   useEffect(() => {
     fetch("/api/panel/secretary")
       .then((r) => r.json())
@@ -70,6 +77,41 @@ export default function ConfiguracionPage() {
         });
       });
   }, []);
+
+  const loadEmailConfig = useCallback(() => {
+    fetch("/api/panel/channels/email")
+      .then((r) => r.json())
+      .then((d) => {
+        setInboundAddress(d.inboundAddress || "");
+        if (d.emailAddress) setEmailInput(d.emailAddress);
+      });
+  }, []);
+
+  useEffect(() => { loadEmailConfig(); }, [loadEmailConfig]);
+
+  async function connectEmail() {
+    setEmailSaving(true);
+    setEmailMsg("");
+    const r = await fetch("/api/panel/channels/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emailAddress: emailInput }),
+    });
+    if (r.ok) {
+      setEmailMsg("Email conectado correctamente");
+      if (config) setConfig({ ...config, emailConnected: true, emailAddress: emailInput });
+    } else {
+      const d = await r.json();
+      setEmailMsg(d.error || "Error al conectar");
+    }
+    setEmailSaving(false);
+  }
+
+  async function disconnectEmail() {
+    await fetch("/api/panel/channels/email", { method: "DELETE" });
+    if (config) setConfig({ ...config, emailConnected: false });
+    setEmailMsg("Email desconectado");
+  }
 
   async function save(partial?: Partial<SecretaryConfig>) {
     if (!config) return;
@@ -370,65 +412,143 @@ export default function ConfiguracionPage() {
       {/* Tab: Canales */}
       {activeTab === "channels" && (
         <div className="space-y-4">
-          {[
-            {
-              icon: "📱",
-              name: "WhatsApp",
-              connected: config.whatsappConnected,
-              color: "green",
-              detail: config.whatsappNumber || "No conectado",
-            },
-            {
-              icon: "📧",
-              name: "Email",
-              connected: config.emailConnected,
-              color: "blue",
-              detail: config.emailAddress || "No conectado",
-            },
-            {
-              icon: "📅",
-              name: "Google Calendar",
-              connected: config.calendarConnected,
-              color: "indigo",
-              detail: "Gestión de citas",
-            },
-          ].map((channel) => (
-            <div key={channel.name} className="bg-white rounded-2xl border border-gray-100 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className={`w-12 h-12 bg-${channel.color}-100 rounded-xl flex items-center justify-center text-2xl flex-shrink-0`}>
-                    {channel.icon}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{channel.name}</h3>
-                    <p className="text-sm text-gray-500">{channel.detail}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${channel.connected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                    {channel.connected ? "✓ Conectado" : "No conectado"}
-                  </span>
+
+          {/* WhatsApp — coming soon */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">📱</div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">WhatsApp</h3>
+                  <p className="text-sm text-gray-500">{config.whatsappNumber || "Tu secretario responde mensajes de WhatsApp"}</p>
                 </div>
               </div>
-              <div className="mt-4 flex gap-2">
-                <button className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50">
-                  {channel.connected ? "Reconectar" : `Conectar ${channel.name}`}
-                </button>
-                <button className="px-4 py-2 bg-gray-50 text-gray-500 rounded-xl text-sm hover:bg-gray-100">
-                  Ejecutar diagnóstico
+              <span className={`text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 ${config.whatsappConnected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                {config.whatsappConnected ? "✓ Conectado" : "Próximamente"}
+              </span>
+            </div>
+          </div>
+
+          {/* Email — functional */}
+          <div className={`bg-white rounded-2xl border-2 p-5 ${config.emailConnected ? "border-blue-200" : "border-gray-100"}`}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">📧</div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Email</h3>
+                  <p className="text-sm text-gray-500">
+                    {config.emailConnected
+                      ? `Conectado · ${config.emailAddress}`
+                      : "Recibe y gestiona emails de clientes con tu secretario"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className={`text-xs font-medium px-2 py-1 rounded-full ${config.emailConnected ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"}`}>
+                  {config.emailConnected ? "✓ Conectado" : "No conectado"}
+                </span>
+                <button
+                  onClick={() => setEmailExpanded(!emailExpanded)}
+                  className="text-xs text-indigo-600 hover:underline"
+                >
+                  {emailExpanded ? "Ocultar" : config.emailConnected ? "Configurar" : "Conectar"}
                 </button>
               </div>
             </div>
-          ))}
+
+            {emailExpanded && (
+              <div className="mt-5 pt-5 border-t border-gray-100 space-y-4">
+                {/* Step 1: business email */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700 block mb-1">
+                    Email de tu negocio (el que usan tus clientes para contactarte)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      placeholder="ej. info@tunegocio.com"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                    <button
+                      onClick={connectEmail}
+                      disabled={emailSaving || !emailInput.trim()}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+                    >
+                      {emailSaving ? "Guardando…" : "Guardar"}
+                    </button>
+                    {config.emailConnected && (
+                      <button
+                        onClick={disconnectEmail}
+                        className="px-3 py-2 border border-red-200 text-red-500 text-sm rounded-xl hover:bg-red-50"
+                      >
+                        Desconectar
+                      </button>
+                    )}
+                  </div>
+                  {emailMsg && (
+                    <p className={`text-xs mt-1 ${emailMsg.includes("Error") ? "text-red-500" : "text-green-600"}`}>{emailMsg}</p>
+                  )}
+                </div>
+
+                {/* Step 2: inbound forwarding instructions */}
+                <div className="bg-blue-50 rounded-xl p-4">
+                  <p className="text-sm font-semibold text-blue-800 mb-2">📨 Cómo recibir emails automáticamente</p>
+                  <p className="text-sm text-blue-700 mb-3">
+                    Configura un reenvío automático desde tu cuenta de correo hacia esta dirección:
+                  </p>
+                  <div className="bg-white border border-blue-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                    <code className="text-xs text-blue-900 font-mono break-all">{inboundAddress || "secretaria-[tu-id]@inbound.secretarios-ia.com"}</code>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(inboundAddress)}
+                      className="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-3">
+                    <strong>Gmail:</strong> Ajustes → Ver todos → Reenvío → Añadir dirección de reenvío<br />
+                    <strong>Outlook:</strong> Ajustes → Correo → Reenvío → Activar reenvío<br />
+                    Cada email que llegue a tu buzón se reenviará a tu secretario, que sugerirá una respuesta para que la revises antes de enviar.
+                  </p>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <p className="text-xs text-amber-700">
+                    <strong>¿Cómo funciona?</strong> Cuando llegue un email, tu secretario lo clasificará y redactará una respuesta sugerida.
+                    Tú decides si <strong>confirmar</strong>, <strong>editar</strong> o <strong>cancelar</strong> antes de que se envíe.
+                    Nada se envía automáticamente.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Google Calendar — coming soon */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 opacity-70">
+            <div className="flex items-start gap-3">
+              <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center text-2xl">📅</div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-gray-900">Google Calendar</h3>
+                  <span className="text-xs bg-indigo-100 text-indigo-500 px-2 py-0.5 rounded-full">Próximamente</span>
+                </div>
+                <p className="text-sm text-gray-500 mt-0.5">Sincroniza citas directamente con tu calendario de Google</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Calls — future */}
           <div className="bg-gray-50 rounded-2xl border border-gray-100 p-5 opacity-60">
             <div className="flex items-start gap-3">
               <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-2xl">📞</div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <h3 className="font-semibold text-gray-700">Llamadas</h3>
-                  <span className="text-xs bg-gray-200 text-gray-400 px-2 py-0.5 rounded-full">Próximamente Q3 2026</span>
+                  <span className="text-xs bg-gray-200 text-gray-400 px-2 py-0.5 rounded-full">Próximamente</span>
                 </div>
-                <p className="text-sm text-gray-400">Tu secretario va a atender llamadas con voz natural</p>
+                <p className="text-sm text-gray-400">Tu secretario atenderá llamadas con voz natural</p>
               </div>
             </div>
           </div>
