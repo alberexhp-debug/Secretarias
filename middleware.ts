@@ -1,23 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
 
-export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+// Lightweight middleware: only checks cookie presence.
+// Full JWT + DB verification happens inside each API route via getSession().
+export function middleware(req: NextRequest) {
+  const token = req.cookies.get("auth-token")?.value;
 
-  // Protect /panel routes (not API — those return JSON 401/402)
-  if (pathname.startsWith("/panel")) {
-    const token = req.cookies.get("auth-token")?.value;
-    if (!token || !verifyToken(token)) {
-      return NextResponse.redirect(new URL("/login", req.url));
-    }
-  }
-
-  // Protect /onboarding
-  if (pathname.startsWith("/onboarding")) {
-    const token = req.cookies.get("auth-token")?.value;
-    if (!token || !verifyToken(token)) {
-      return NextResponse.redirect(new URL("/login", req.url));
-    }
+  if (!token) {
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("next", req.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
