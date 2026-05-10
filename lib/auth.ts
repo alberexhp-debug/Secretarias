@@ -58,3 +58,14 @@ export function isPlanActive(user: { planType: string; planExpiry: Date | null; 
   if (!user.trialEnd) return true;
   return new Date(user.trialEnd) > new Date();
 }
+
+export function isAdmin(user: { email: string }): boolean {
+  const adminEmails = (process.env.ADMIN_EMAIL || "").split(",").map((e) => e.trim().toLowerCase());
+  return adminEmails.includes(user.email.toLowerCase());
+}
+
+export async function requireAdmin() {
+  const user = await getSession();
+  if (!user || !isAdmin(user)) throw new Error("Forbidden");
+  return user;
+}
